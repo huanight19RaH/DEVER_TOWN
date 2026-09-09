@@ -6,6 +6,15 @@ class AuthService {
     this.user = null;
     this.pendingSyncData = {};
     this.syncTimer = null;
+    this.syncResolvers = [];
+    this.syncInFlight = false;
+    this.syncRequestId = 0;
+    this.activeSyncRequestId = null;
+    this.activeSyncResolvers = [];
+    this.syncAbortController = null;
+    this.failedSyncData = null;
+    this.syncStatus = { state: 'idle', error: null, lastSyncedAt: null };
+    this.syncStatusListeners = new Set();
     try {
       const stored = localStorage.getItem('dever_user');
       this.user = stored ? JSON.parse(stored) : null;
@@ -46,6 +55,9 @@ class AuthService {
   }
 
   saveSession(token, user) {
+    if (this.user?.id && user?.id && this.user.id !== user.id) {
+      this.clearPendingSync();
+    }
     this.token = token;
     this.user = user;
     if (token) localStorage.setItem('dever_token', token);
@@ -71,6 +83,7 @@ class AuthService {
   }
 
   setGuestSession(nickname) {
+    this.clearPendingSync();
     this.token = null;
     this.user = {
       id: `guest_${Date.now()}`,
@@ -365,51 +378,176 @@ class AuthService {
     }
   }
 
-  queueProfileSync(field, value) {
-    this.pendingSyncData[field] = value;
-    this.touchSession();
+  getSyncStatus() {
+    return { ...this.syncStatus };
+  }
 
-    if (!this.token) {
-      return Promise.resolve(null);
-    }
+  subscribeToSyncStatus(callback) {
+    if (typeof callback !== 'function') return () => {};
+    this.syncStatusListeners.add(callback);
+    callback(this.getSyncStatus());
+    return () => this.syncStatusListeners.delete(callback);
+  }
 
-    if (this.syncTimer) {
-      clearTimeout(this.syncTimer);
-    }
-
-    return new Promise((resolve) => {
-      this.syncTimer = setTimeout(async () => {
-        const dataToSend = { ...this.pendingSyncData };
-        this.pendingSyncData = {};
-        this.syncTimer = null;
-
-        try {
-          const res = await fetch(`${this.getBaseUrl()}/api/auth/sync-profile`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.token}`
-            },
-            body: JSON.stringify(dataToSend)
-          });
-
-          const data = await res.json();
-          if (res.ok && data.success && data.user) {
-            this.user = data.user;
-            localStorage.setItem('dever_user', JSON.stringify(data.user));
-            resolve(data.user);
-          } else {
-            resolve(null);
-          }
-        } catch (err) {
-          console.warn('⚠️ Lỗi đồng bộ dữ liệu người dùng lên máy chủ:', err);
-          resolve(null);
-        }
-      }, 400);
+  setSyncStatus(state, error = null) {
+    this.syncStatus = {
+      state,
+      error,
+      lastSyncedAt: state === 'success' ? Date.now() : this.syncStatus.lastSyncedAt
+    };
+    const snapshot = this.getSyncStatus();
+    this.syncStatusListeners.forEach(callback => {
+      try {
+        callback(snapshot);
+      } catch (err) {
+        console.warn('[AuthService] Lỗi cập nhật trạng thái đồng bộ:', err);
+      }
     });
   }
 
+  mergeSyncPatch(target, patch) {
+    const merged = { ...target, ...patch };
+    if (target.gameRecords || patch.gameRecords) {
+      merged.gameRecords = {
+        ...(target.gameRecords || {}),
+        ...(patch.gameRecords || {})
+      };
+    }
+    return merged;
+  }
+
+  /**
+   * Đồng bộ local-first toàn bộ tiến trình người chơi. Các cập nhật gần nhau
+   * được gộp lại để minigame không tạo một request cho mỗi frame/điểm số.
+   */
+  syncFullProfile(profilePatch = {}) {
+    if (!profilePatch || typeof profilePatch !== 'object') {
+      return Promise.resolve(null);
+    }
+
+    this.touchSession();
+
+    if (!this.token) {
+      this.setSyncStatus('local');
+      return Promise.resolve(null);
+    }
+
+    const retryBase = this.mergeSyncPatch(this.failedSyncData || {}, this.pendingSyncData);
+    this.pendingSyncData = this.mergeSyncPatch(retryBase, profilePatch);
+    this.failedSyncData = null;
+    this.setSyncStatus('pending');
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+
+    const promise = new Promise(resolve => {
+      this.syncResolvers.push(resolve);
+    });
+
+    this.syncTimer = setTimeout(() => this.flushProfileSync(), 400);
+    return promise;
+  }
+
+  async flushProfileSync() {
+    // A debounce timer can fire while the previous request is still awaiting a
+    // response. Leave the queued patch untouched; the active request's finally
+    // block will schedule the next serialized flush.
+    this.syncTimer = null;
+    if (this.syncInFlight) return null;
+    if (!this.token || Object.keys(this.pendingSyncData).length === 0) return null;
+
+    const dataToSend = { ...this.pendingSyncData };
+    const resolvers = this.syncResolvers.splice(0);
+    this.pendingSyncData = {};
+    const requestId = ++this.syncRequestId;
+    this.syncInFlight = true;
+    this.activeSyncRequestId = requestId;
+    this.activeSyncResolvers = resolvers;
+    this.syncAbortController = new AbortController();
+    this.setSyncStatus('pending');
+
+    try {
+      const res = await fetch(`${this.getBaseUrl()}/api/auth/sync-profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
+        },
+        body: JSON.stringify(dataToSend),
+        signal: this.syncAbortController.signal
+      });
+
+      const data = await res.json();
+      if (this.activeSyncRequestId !== requestId) return null;
+      if (!res.ok || !data.success || !data.user) {
+        throw new Error(data.message || 'Không thể đồng bộ tiến trình');
+      }
+
+      this.user = data.user;
+      localStorage.setItem('dever_user', JSON.stringify(data.user));
+      this.failedSyncData = null;
+      this.setSyncStatus('success');
+      resolvers.forEach(resolve => resolve(data.user));
+      this.activeSyncResolvers = [];
+      return data.user;
+    } catch (err) {
+      if (this.activeSyncRequestId !== requestId) return null;
+      // A later request represents newer local state and must win when failed
+      // batches are folded into the retry queue.
+      this.failedSyncData = this.mergeSyncPatch(this.failedSyncData || {}, dataToSend);
+      this.setSyncStatus('error', err.message || 'Mất kết nối máy chủ');
+      resolvers.forEach(resolve => resolve(null));
+      this.activeSyncResolvers = [];
+      return null;
+    } finally {
+      if (this.activeSyncRequestId !== requestId) return;
+      this.syncInFlight = false;
+      this.activeSyncRequestId = null;
+      this.activeSyncResolvers = [];
+      this.syncAbortController = null;
+
+      if (Object.keys(this.pendingSyncData).length > 0) {
+        // Recover every field from the failed batch, then overlay the newer
+        // queued values. A later partial patch can never erase older fields.
+        this.pendingSyncData = this.mergeSyncPatch(
+          this.failedSyncData || {},
+          this.pendingSyncData
+        );
+        this.failedSyncData = null;
+        this.setSyncStatus('pending');
+        if (!this.syncTimer) {
+          this.syncTimer = setTimeout(() => this.flushProfileSync(), 0);
+        }
+      }
+    }
+  }
+
+  retryProfileSync() {
+    if (!this.failedSyncData) return Promise.resolve(null);
+    const retryData = this.mergeSyncPatch(this.failedSyncData, this.pendingSyncData);
+    this.failedSyncData = null;
+    this.pendingSyncData = {};
+    return this.syncFullProfile(retryData);
+  }
+
+  clearPendingSync() {
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    if (this.syncAbortController) this.syncAbortController.abort();
+    this.syncTimer = null;
+    this.pendingSyncData = {};
+    this.failedSyncData = null;
+    this.syncResolvers.splice(0).forEach(resolve => resolve(null));
+    this.activeSyncResolvers.splice(0).forEach(resolve => resolve(null));
+    this.syncInFlight = false;
+    this.activeSyncRequestId = null;
+    this.syncAbortController = null;
+    this.setSyncStatus('idle');
+  }
+
+  queueProfileSync(field, value) {
+    return this.syncFullProfile({ [field]: value });
+  }
+
   logout() {
+    this.clearPendingSync();
     this.token = null;
     this.user = null;
     localStorage.removeItem('dever_token');
