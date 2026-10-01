@@ -46,39 +46,53 @@ function initGame() {
   // 3. Khởi tạo Welcome Gate & Loading Overlay
   const welcomeGate = new WelcomeGate({
     onEnterGame: ({ user, isGuest }) => {
-      const scene = game.scene.getScene('WorldScene');
-      if (scene && scene.player) {
-        scene.activatePlayerSession();
-        let wardrobeConfig = user?.wardrobe_config || null;
-        const savedWardrobeRaw = localStorage.getItem('dever_wardrobe_config');
-        if (!wardrobeConfig && savedWardrobeRaw) {
-          try {
-            const parsed = JSON.parse(savedWardrobeRaw);
-            if (parsed && typeof parsed === 'object') wardrobeConfig = parsed;
-          } catch (e) {}
-        } else if (wardrobeConfig && typeof wardrobeConfig === 'object') {
-          try { localStorage.setItem('dever_wardrobe_config', JSON.stringify(wardrobeConfig)); } catch (e) {}
+      const applyToScene = () => {
+        const scene = game.scene.getScene('WorldScene');
+        if (scene && scene.player) {
+          scene.activatePlayerSession();
+          let wardrobeConfig = user?.wardrobe_config || null;
+          const savedWardrobeRaw = localStorage.getItem('dever_wardrobe_config');
+          if (!wardrobeConfig && savedWardrobeRaw) {
+            try {
+              const parsed = JSON.parse(savedWardrobeRaw);
+              if (parsed && typeof parsed === 'object') wardrobeConfig = parsed;
+            } catch (e) {}
+          } else if (wardrobeConfig && typeof wardrobeConfig === 'object') {
+            try { localStorage.setItem('dever_wardrobe_config', JSON.stringify(wardrobeConfig)); } catch (e) {}
+          }
+
+          const charId = wardrobeConfig?.characterId || wardrobeConfig?.outfitId || user?.avatar_id || 'hoodie_dever';
+          const avatarId = wardrobeConfig ? (wardrobeConfig.inHandItem && wardrobeConfig.inHandItem !== 'none' ? 'custom_wardrobe' : charId) : (user?.avatar_id || user?.avatarId || 'hoodie_dever');
+
+          scene.player.updateProfile({
+            name: user.display_name || user.displayName,
+            avatarId: avatarId,
+            role: user.role || (isGuest ? 'guest' : 'dev'),
+            wardrobeConfig: wardrobeConfig
+          });
+
+          const equippedItem = user.equipped_item_id || localStorage.getItem('dever_equipped_item');
+          if (equippedItem && scene.player.setEquippedItem) {
+            scene.player.setEquippedItem(equippedItem);
+          }
+
+          scene.updateHeaderProfile(user);
+          if (scene.socketManager) {
+            scene.socketManager.reconnectWithAuth();
+          }
+          return true;
         }
+        return false;
+      };
 
-        const charId = wardrobeConfig?.characterId || wardrobeConfig?.outfitId || user?.avatar_id || 'hoodie_dever';
-        const avatarId = wardrobeConfig ? (wardrobeConfig.inHandItem && wardrobeConfig.inHandItem !== 'none' ? 'custom_wardrobe' : charId) : (user?.avatar_id || user?.avatarId || 'hoodie_dever');
-
-        scene.player.updateProfile({
-          name: user.display_name || user.displayName,
-          avatarId: avatarId,
-          role: user.role || (isGuest ? 'guest' : 'dev'),
-          wardrobeConfig: wardrobeConfig
-        });
-
-        const equippedItem = user.equipped_item_id || localStorage.getItem('dever_equipped_item');
-        if (equippedItem && scene.player.setEquippedItem) {
-          scene.player.setEquippedItem(equippedItem);
-        }
-
-        scene.updateHeaderProfile(user);
-        if (scene.socketManager) {
-          scene.socketManager.reconnectWithAuth();
-        }
+      if (!applyToScene()) {
+        const maxWaitMs = 15000;
+        const startTime = Date.now();
+        const checkTimer = setInterval(() => {
+          if (applyToScene() || (Date.now() - startTime > maxWaitMs)) {
+            clearInterval(checkTimer);
+          }
+        }, 80);
       }
     }
   });

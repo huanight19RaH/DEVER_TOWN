@@ -99,7 +99,7 @@ export class WorldScene extends Phaser.Scene {
     const initialName = user ? (user.display_name || user.displayName) : (localStorage.getItem('dever_nickname') || 'Dever Member');
     const initialRole = user ? user.role : (authService.isLoggedIn() ? 'dev' : 'guest');
     const initialEquipped = (user && user.equipped_item_id) || localStorage.getItem('dever_equipped_item') || null;
-    const initialAvatar = wardrobeConfig ? 'custom_wardrobe' : (user ? (user.avatar_id || user.avatarId) : 'dev_hoodie');
+    const initialAvatar = wardrobeConfig ? 'custom_wardrobe' : (user ? (user.avatar_id || user.avatarId) : 'sample_dev_dever');
 
     this.player = new Player(this, spawnX, spawnY, {
       name: initialName,

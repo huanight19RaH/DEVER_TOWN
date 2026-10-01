@@ -46,8 +46,8 @@ export class LightingManager {
     this.timeListeners = new Set();
     this.lastFirefliesState = null;
 
-    // Quầng sáng chân nhân vật (Foot Aura / Lantern) - Mặc định TẮT theo phản hồi người dùng
-    this.enableFootAura = false;
+    // Quầng sáng cá nhân dịu nhẹ quanh chân người chơi (Foot Aura) - Bật mặc định để luôn nhìn rõ nhân vật ban đêm
+    this.enableFootAura = true;
 
     this.init();
   }
@@ -429,14 +429,14 @@ export class LightingManager {
       // Hermite Falloff: f(t) = (1 - t^2)^2 (mượt mà, triệt tiêu viền cứng ở mép)
       const factor = Math.max(0, 1 - t * t);
       const smoothFactor = factor * factor;
-      const stepAlpha = (0.016 * smoothFactor) * intensity;
+      const stepAlpha = (0.075 * smoothFactor) * intensity;
 
       this.lightGraphics.fillStyle(colorHex, stepAlpha);
       this.drawEllipseOrCircleOn(this.lightGraphics, cx, cy, rx, ry);
     }
 
     // Core Hotspot (lõi sáng ấm áp ở tâm)
-    const coreAlpha = Math.min(0.35, 0.14 * intensity);
+    const coreAlpha = Math.min(0.65, 0.35 * intensity);
     this.lightGraphics.fillStyle(0xffffff, coreAlpha);
     this.drawEllipseOrCircleOn(this.lightGraphics, cx, cy, radiusX * 0.22, radiusY * 0.22);
   }
@@ -467,7 +467,7 @@ export class LightingManager {
         const spread = b / beamSteps;
         const topW = 4 + 4 * spread;
         const botW = (rad * 0.72) * spread;
-        const beamAlpha = (0.015 * (1 - spread * 0.55)) * intensity;
+        const beamAlpha = (0.055 * (1 - spread * 0.55)) * intensity;
 
         this.lightGraphics.fillStyle(color, beamAlpha);
         this.lightGraphics.fillPoints([

@@ -28,7 +28,7 @@ export class Player extends Phaser.GameObjects.Sprite {
       }
     }
 
-    let avatarId = options.avatarId || (wardrobeConfig ? (wardrobeConfig.characterId || wardrobeConfig.outfitId || 'hoodie_dever') : 'hoodie_dever');
+    let avatarId = options.avatarId || (wardrobeConfig ? (wardrobeConfig.characterId || wardrobeConfig.outfitId || 'sample_dev_dever') : 'sample_dev_dever');
     let resolvedTextureKey = `char_${avatarId}`;
 
     if (wardrobeConfig && scene) {
@@ -53,13 +53,13 @@ export class Player extends Phaser.GameObjects.Sprite {
       }
     }
 
-    const safeTextureKey = (scene && scene.textures.exists(resolvedTextureKey)) ? resolvedTextureKey : 'char_hoodie_dever';
+    const safeTextureKey = (scene && scene.textures.exists(resolvedTextureKey)) ? resolvedTextureKey : 'char_sample_dev_dever';
     super(scene, x, y, safeTextureKey, 0);
 
     this.name = options.name || 'Dever Member';
     this.avatarId = (scene && scene.textures.exists(safeTextureKey))
       ? safeTextureKey.replace(/^char_/, '')
-      : 'hoodie_dever';
+      : 'sample_dev_dever';
     this.wardrobeConfig = wardrobeConfig;
     this.role = options.role || 'guest';
     this.isCurrentPlayer = options.isCurrentPlayer || false;

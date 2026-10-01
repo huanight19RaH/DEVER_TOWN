@@ -853,8 +853,10 @@ export class TextureGenerator {
     }
 
     const key = `char_${config.id}`;
+    // Nếu texture đã được nạp từ file ảnh PNG vẽ tay nghệ thuật (Handcrafted Pixel Art), giữ nguyên 100%, không ghi đè hình khối canvas
     if (scene.textures.exists(key)) {
-      scene.textures.remove(key);
+      this.createCharacterAnimations(scene, config.id);
+      return;
     }
 
     scene.textures.addSpriteSheet(key, canvas, {

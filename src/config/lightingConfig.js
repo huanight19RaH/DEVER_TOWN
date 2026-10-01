@@ -11,7 +11,7 @@ export const DAY_NIGHT_PERIODS = {
     startHour: 5.0,
     endHour: 7.5,
     ambientColor: 0xfbcfe8, // Hồng đào ấm áp ban mai
-    darknessAlpha: 0.18,
+    darknessAlpha: 0.08,
     lampGlowAlpha: 0.35,
     streetLightsOn: true,
     fireflies: false,
@@ -35,7 +35,7 @@ export const DAY_NIGHT_PERIODS = {
     startHour: 16.5,
     endHour: 18.75,
     ambientColor: 0xf97316, // Cam hổ phách rực rỡ FPTU
-    darknessAlpha: 0.32,
+    darknessAlpha: 0.15,
     lampGlowAlpha: 0.65,
     streetLightsOn: true,
     fireflies: false,
@@ -46,8 +46,8 @@ export const DAY_NIGHT_PERIODS = {
     label: 'Ban Đêm',
     startHour: 18.75,
     endHour: 23.5,
-    ambientColor: 0x090e24, // Xanh tím thẫm lung linh
-    darknessAlpha: 0.68,
+    ambientColor: 0x1e293b, // Xanh xám đêm lung linh, dịu mắt, nhìn rõ map
+    darknessAlpha: 0.25,
     lampGlowAlpha: 0.95,
     streetLightsOn: true,
     fireflies: true,
@@ -58,8 +58,8 @@ export const DAY_NIGHT_PERIODS = {
     label: 'Đêm Khuya',
     startHour: 23.5,
     endHour: 5.0,
-    ambientColor: 0x040612, // Đêm lạnh sâu thẳm
-    darknessAlpha: 0.76,
+    ambientColor: 0x0f172a, // Đêm sâu thẳm nhưng vẫn nhìn rõ từng bước chân
+    darknessAlpha: 0.32,
     lampGlowAlpha: 0.9,
     streetLightsOn: true,
     fireflies: true,

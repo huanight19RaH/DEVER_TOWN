@@ -90,7 +90,7 @@ class AuthService {
       display_name: nickname,
       displayName: nickname,
       role: 'guest',
-      avatar_id: 'dev_hoodie'
+      avatar_id: 'sample_dev_dever'
     };
     localStorage.removeItem('dever_token');
     localStorage.setItem('dever_user', JSON.stringify(this.user));
